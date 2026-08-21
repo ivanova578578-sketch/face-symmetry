@@ -1,17 +1,4 @@
 import streamlit as st
-import os
-import sys
-
-# Хитрый трюк: принудительная установка базовых библиотек прямо из кода в обход кэша сервера
-try:
-    import cv2
-    import numpy as np
-except ImportError:
-    # Если библиотек нет, устанавливаем их скрытно прямо сейчас
-    os.system(f"{sys.executable} -m pip install opencv-python-headless numpy")
-    # Перезапускаем скрипт, чтобы система увидела новые библиотеки
-    os.execv(sys.executable, ['python'] + sys.argv)
-
 import cv2
 import numpy as np
 
@@ -46,7 +33,7 @@ if uploaded_file is not None:
         faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(60, 60))
         
         if len(faces) > 0:
-            fx, fy, fw, fh = faces[0]  # Берем первое лицо
+            fx, fy, fw, fh = faces  # Берем первое лицо
             auto_mid_x = int(fx + (fw / 2))
             st.success("🎯 Центр лица успешно найден автоматически! Выровняли разрез по переносице.")
         else:
