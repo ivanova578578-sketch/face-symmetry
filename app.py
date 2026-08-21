@@ -1,25 +1,13 @@
 import streamlit as st
 import cv2
 import numpy as np
-import mediapipe as mp
+import face_recognition
 
 # Настройка внешнего вида страницы
 st.set_page_config(page_title="Симметрия лица", page_icon="👤", layout="centered")
 
 st.title("👤 Двойники в твоем лице")
 st.write("Загрузи фото, и умная нейросеть автоматически найдет центр твоего лица!")
-
-# Инициализируем нейросеть Google MediaPipe для поиска точек лица
-@st.cache_resource
-def load_mesh():
-    return mp.solutions.face_mesh.FaceMesh(
-        static_image_mode=True,
-        max_num_faces=1,
-        refine_landmarks=True,
-        min_detection_confidence=0.5
-    )
-
-face_mesh = load_mesh()
 
 # Загрузка файла пользователем
 uploaded_file = st.file_uploader("Выбери фотографию (JPG, PNG)", type=["jpg", "jpeg", "png"])
@@ -30,30 +18,32 @@ if uploaded_file is not None:
     img = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
     h, w, _ = img.shape
     
-    # Переводим в RGB для нейросети
+    # Конвертируем в RGB для работы детектора face_recognition
     img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    results = face_mesh.process(img_rgb)
     
-    # Определяем центр лица по умолчанию (середина кадра)
+    # Поиск ключевых точек лица
+    face_landmarks_list = face_recognition.face_landmarks(img_rgb)
+    
+    # Центр лица по умолчанию (геометрическая середина кадра)
     auto_mid_x = w // 2
     
-    if results.multi_face_landmarks:
-        # Нейросеть нашла лицо! Берем ключевые осевые точки:
-        # Индексы точек MediaPipe: 168 (переносица), 1 (кончик носа), 152 (подбородок)
-        landmarks = results.multi_face_landmarks[0].landmark
+    if len(face_landmarks_list) > 0:
+        # Берем точки первого найденного лица
+        landmarks = face_landmarks_list[0]
         
-        # Получаем координаты X для этих точек (они в процентах от 0 до 1, умножаем на ширину w)
-        bridge_x = int(landmarks[168].x * w)
-        nose_x = int(landmarks[1].x * w)
-        chin_x = int(landmarks[152].x * w)
-        
-        # Находим среднее арифметическое центральной оси лица
-        auto_mid_x = int((bridge_x + nose_x + chin_x) / 3)
-        st.success("🎯 Нейросеть успешно нашла точный центр лица по переносице, носу и подбородку!")
+        # Нам нужны: переносица (top_bridge) и кончик носа (nose_tip)
+        if 'top_of_nose_bridge' in landmarks and 'nose_tip' in landmarks:
+            # Берем самую верхнюю точку переносицы (индекс 0) и самую нижнюю кончика носа (индекс 4)
+            bridge_point = landmarks['top_of_nose_bridge'][0]
+            nose_point = landmarks['nose_tip'][4]
+            
+            # Находим идеальный математический центр оси носа по координате X
+            auto_mid_x = int((bridge_point[0] + nose_point[0]) / 2)
+            st.success("🎯 Центр лица успешно определен по оси переносицы и кончика носа!")
     else:
-        st.warning("⚠️ Лицо не распознано автоматически. Используется центр кадра. Ты можешь настроить его вручную:")
+        st.warning("⚠️ Лицо не распознано автоматически. Используется центр кадра. Подправь ползунком:")
 
-    # Ползунок подстраивается автоматически под точку носа, найденную нейросетью!
+    # Ползунок автоматически прыгает в найденную координату оси носа!
     mid_x = st.slider("📐 Смести линию разреза, если хочешь подкорректировать результат:", 
                       min_value=1, max_value=w-1, value=auto_mid_x, step=1)
     
