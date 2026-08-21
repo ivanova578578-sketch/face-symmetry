@@ -30,7 +30,6 @@ if uploaded_file is not None:
     limg = cv2.merge((cl, a_channel, b_channel))
     img_corrected = cv2.cvtColor(limg, cv2.COLOR_LAB2BGR)
     
-    # --- ТОЧНАЯ ЛОГИКА ИЗ COLAB ---
     # Обработка левой половины
     left_half = img_corrected[:, :mid_x]
     left_half_flipped = cv2.flip(left_half, 1)
@@ -41,27 +40,32 @@ if uploaded_file is not None:
     right_half_flipped = cv2.flip(right_half, 1)
     right_face = np.hstack((right_half_flipped, right_half))
     
-    # Конвертируем в RGB для корректного отображения цветов на сайте
-    left_face_rgb = cv2.cvtColor(left_face, cv2.COLOR_BGR2RGB)
-    right_face_rgb = cv2.cvtColor(right_face, cv2.COLOR_BGR2RGB)
+    # --- МАТЕМАТИЧЕСКОЕ ВЫРАВНИВАНИЕ ВЫСОТЫ И ШИРИНЫ НА ЭКРАНЕ ---
+    # Мы сделаем так, чтобы на экране оба лица имели одинаковую стандартную ширину (например, 400 пикселей)
+    # А высота рассчитается автоматически, исходя из пропорций оригинала кадра.
+    target_w = 400
+    target_h = int(h * (target_w / w)) # Сохраняем пропорции исходной фотографии
+    
+    # Создаем идеальные по размеру копии специально для отображения на сайте
+    left_face_disp = cv2.resize(left_face, (target_w, target_h))
+    right_face_disp = cv2.resize(right_face, (target_w, target_h))
+    
+    # Конвертируем в RGB для сайта
+    left_face_rgb = cv2.cvtColor(left_face_disp, cv2.COLOR_BGR2RGB)
+    right_face_rgb = cv2.cvtColor(right_face_disp, cv2.COLOR_BGR2RGB)
     
     # Отображение результатов на сайте
     st.write("---")
     col1, col2 = st.columns(2)
     
-    # Задаем фиксированную высоту для красивого отображения на экране (например, 450 пикселей)
-    display_height = 450
-    
     with col1:
         st.subheader("Левая сторона 🕶️")
-        # Параметр height задает одинаковую высоту на экране
-        st.image(left_face_rgb, height=display_height)
+        st.image(left_face_rgb, use_container_width=True)
         _, img_encoded = cv2.imencode('.jpg', left_face)
         st.download_button(label="📥 Скачать левое лицо", data=img_encoded.tobytes(), file_name="left_symmetry.jpg", mime="image/jpeg")
         
     with col2:
         st.subheader("Правая сторона ✨")
-        # Параметр height задает одинаковую высоту на экране
-        st.image(right_face_rgb, height=display_height)
+        st.image(right_face_rgb, use_container_width=True)
         _, img_encoded = cv2.imencode('.jpg', right_face)
         st.download_button(label="📥 Скачать правое лицо", data=img_encoded.tobytes(), file_name="right_symmetry.jpg", mime="image/jpeg")
