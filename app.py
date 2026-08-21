@@ -6,7 +6,7 @@ import numpy as np
 st.set_page_config(page_title="Симметрия лица", page_icon="👤", layout="centered")
 
 st.title("👤 Двойники в твоем лице")
-st.write("Загрузи фото, и алгоритм автоматически создаст твоих симметричных близнецов!")
+st.write("Загрузи фото, и алгоритм моментально создаст твоих симметричных близнецов!")
 
 # Загрузка файла пользователем
 uploaded_file = st.file_uploader("Выбери фотографию (JPG, PNG)", type=["jpg", "jpeg", "png"])
@@ -17,18 +17,8 @@ if uploaded_file is not None:
     img = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
     h, w, _ = img.shape
     
-    # Автоматический расчет центра кадра по умолчанию
-    auto_mid_x = w // 2
-    
-    # Скрываем ручную настройку в аккуратный раскрывающийся спойлер
-    # Друзья увидят его только если сами захотят нажать
-    with st.expander("⚙️ Настройки (если лицо расположено не по центру кадра)"):
-        mid_x = st.slider("📐 Наведи линию точно на центр носа:", 
-                          min_value=1, max_value=w-1, value=auto_mid_x, step=1)
-    
-    # Если спойлер закрыт, берется автоматический центр кадра
-    if 'mid_x' not in locals():
-        mid_x = auto_mid_x
+    # СТРОГАЯ АВТОМАТИКА: Режем ровно пополам без всяких ползунков
+    mid_x = w // 2
 
     # Умная цветокоррекция яркости (CLAHE) — убирает боковые тени, как в Colab
     lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
@@ -38,7 +28,7 @@ if uploaded_file is not None:
     limg = cv2.merge((cl, a_channel, b_channel))
     img_corrected = cv2.cvtColor(limg, cv2.COLOR_LAB2BGR)
     
-    # --- ТОЧНАЯ МАТЕМАТИКА ИЗ ВАШЕГО COLAB-КОДА ---
+    # --- МАТЕМАТИКА РАЗРЕЗА ---
     # Обработка левой половины
     left_half = img_corrected[:, :mid_x]
     left_half_flipped = cv2.flip(left_half, 1)
@@ -49,19 +39,15 @@ if uploaded_file is not None:
     right_half_flipped = cv2.flip(right_half, 1)
     right_face = np.hstack((right_half_flipped, right_half))
     
-    # Вычисляем индивидуальные пропорции для правильного отображения (как в Colab!)
+    # --- ВЫРАВНИВАНИЕ ПРОПОРЦИЙ НА ЭКРАНЕ (Как в Colab) ---
     preview_w = 400
+    preview_h = int(h * (preview_w / w)) # Единая высота для обоих лиц на основе исходного кадра
     
-    # Высота для левого лица
-    preview_h_left = int(h * (preview_w / (mid_x * 2))) if mid_x > 0 else h
-    left_face_disp = cv2.resize(left_face, (preview_w, preview_h_left))
+    left_face_disp = cv2.resize(left_face, (preview_w, preview_h))
     left_face_rgb = cv2.cvtColor(left_face_disp, cv2.COLOR_BGR2RGB)
     
-    # Высота для правого лица
-    preview_h_right = int(h * (preview_w / ((w - mid_x) * 2))) if (w - mid_x) > 0 else h
-    right_face_disp = cv2.resize(right_face, (preview_w, preview_h_right))
+    right_face_disp = cv2.resize(right_face, (preview_w, preview_h))
     right_face_rgb = cv2.cvtColor(right_face_disp, cv2.COLOR_BGR2RGB)
-    # -------------------------------------------------------------------------
     
     # Отображение результатов на сайте
     st.write("---")
