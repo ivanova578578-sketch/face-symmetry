@@ -1,25 +1,12 @@
 import streamlit as st
 import cv2
 import numpy as np
-import urllib.request
-import os
 
 # Настройка внешнего вида страницы
 st.set_page_config(page_title="Симметрия лица", page_icon="👤", layout="centered")
 
 st.title("👤 Двойники в твоем лице")
 st.write("Загрузи фото анфас, чтобы увидеть, как бы ты выглядел, если бы твоё лицо было абсолютно симметричным!")
-
-# Безопасная загрузка детектора лиц напрямую через интернет
-@st.cache_resource
-def load_cascade():
-    cascade_path = "haarcascade_frontalface_default.xml"
-    if not os.path.exists(cascade_path):
-        url = "https://githubusercontent.com"
-        urllib.request.urlretrieve(url, cascade_path)
-    return cv2.CascadeClassifier(cascade_path)
-
-face_cascade = load_cascade()
 
 # Загрузка файла пользователем
 uploaded_file = st.file_uploader("Выбери фотографию (JPG, PNG)", type=["jpg", "jpeg", "png"])
@@ -31,17 +18,11 @@ if uploaded_file is not None:
     
     h, w, _ = img.shape
     
-    # Поиск лица для авто-центровки
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(100, 100))
-    
+    # Геометрический центр картинки по умолчанию
     default_mid = w // 2
-    if len(faces) > 0:
-        fx, fy, fw, fh = faces[0]  # Берем первое лицо
-        default_mid = int(fx + (fw / 2))
     
-    # Ползунок для точной ручной настройки центра (если нейросеть промазала)
-    mid_x = st.slider("📐 Смести линию разреза, если она прошла не по центру носа:", 
+    # Удобный интерактивный ползунок для друзей, чтобы они сами могли навести разрез на центр носа
+    mid_x = st.slider("📐 Наведи ползунок точно на центр носа:", 
                       min_value=0, max_value=w, value=default_mid, step=1)
     
     # Умная цветокоррекция яркости (CLAHE)
