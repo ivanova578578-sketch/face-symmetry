@@ -1,13 +1,20 @@
 import streamlit as st
 import cv2
 import numpy as np
-import face_recognition
+import os
 
 # Настройка внешнего вида страницы
 st.set_page_config(page_title="Симметрия лица", page_icon="👤", layout="centered")
 
 st.title("👤 Двойники в твоем лице")
-st.write("Загрузи фото, и умная нейросеть автоматически найдет центр твоего лица!")
+st.write("Загрузи фото, и умный алгоритм автоматически найдет центр твоего лица!")
+
+# Загружаем классический встроенный детектор лиц OpenCV
+@st.cache_resource
+def load_cascade():
+    return cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+
+face_cascade = load_cascade()
 
 # Загрузка файла пользователем
 uploaded_file = st.file_uploader("Выбери фотографию (JPG, PNG)", type=["jpg", "jpeg", "png"])
@@ -18,32 +25,24 @@ if uploaded_file is not None:
     img = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
     h, w, _ = img.shape
     
-    # Конвертируем в RGB для работы детектора face_recognition
-    img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    
-    # Поиск ключевых точек лица
-    face_landmarks_list = face_recognition.face_landmarks(img_rgb)
-    
     # Центр лица по умолчанию (геометрическая середина кадра)
     auto_mid_x = w // 2
     
-    if len(face_landmarks_list) > 0:
-        # Берем точки первого найденного лица
-        landmarks = face_landmarks_list[0]
+    # Пробуем найти лицо встроенными средствами
+    if face_cascade is not None and not face_cascade.empty():
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(60, 60))
         
-        # Нам нужны: переносица (top_bridge) и кончик носа (nose_tip)
-        if 'top_of_nose_bridge' in landmarks and 'nose_tip' in landmarks:
-            # Берем самую верхнюю точку переносицы (индекс 0) и самую нижнюю кончика носа (индекс 4)
-            bridge_point = landmarks['top_of_nose_bridge'][0]
-            nose_point = landmarks['nose_tip'][4]
-            
-            # Находим идеальный математический центр оси носа по координате X
-            auto_mid_x = int((bridge_point[0] + nose_point[0]) / 2)
-            st.success("🎯 Центр лица успешно определен по оси переносицы и кончика носа!")
-    else:
-        st.warning("⚠️ Лицо не распознано автоматически. Используется центр кадра. Подправь ползунком:")
-
-    # Ползунок автоматически прыгает в найденную координату оси носа!
+        if len(faces) > 0:
+            # Берем первое найденное лицо (координаты: x, y, ширина, высота)
+            fx, fy, fw, fh = faces[0]
+            # Вычисляем точный геометрический центр этого лица по горизонтали
+            auto_mid_x = int(fx + (fw / 2))
+            st.success("🎯 Центр лица успешно найден автоматически! Выровняли разрез по переносице.")
+        else:
+            st.info("💡 Лицо не распознано автоматически (возможно, из-за наклона). Подправь ползунок вручную:")
+    
+    # Ползунок автоматически прыгает в найденную координату центра лица!
     mid_x = st.slider("📐 Смести линию разреза, если хочешь подкорректировать результат:", 
                       min_value=1, max_value=w-1, value=auto_mid_x, step=1)
     
