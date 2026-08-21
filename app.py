@@ -1,7 +1,19 @@
 import streamlit as st
+import os
+import sys
+
+# Хитрый трюк: принудительная установка базовых библиотек прямо из кода в обход кэша сервера
+try:
+    import cv2
+    import numpy as np
+except ImportError:
+    # Если библиотек нет, устанавливаем их скрытно прямо сейчас
+    os.system(f"{sys.executable} -m pip install opencv-python-headless numpy")
+    # Перезапускаем скрипт, чтобы система увидела новые библиотеки
+    os.execv(sys.executable, ['python'] + sys.argv)
+
 import cv2
 import numpy as np
-import os
 
 # Настройка внешнего вида страницы
 st.set_page_config(page_title="Симметрия лица", page_icon="👤", layout="centered")
@@ -34,13 +46,11 @@ if uploaded_file is not None:
         faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(60, 60))
         
         if len(faces) > 0:
-            # Берем первое найденное лицо (координаты: x, y, ширина, высота)
-            fx, fy, fw, fh = faces[0]
-            # Вычисляем точный геометрический центр этого лица по горизонтали
+            fx, fy, fw, fh = faces[0]  # Берем первое лицо
             auto_mid_x = int(fx + (fw / 2))
             st.success("🎯 Центр лица успешно найден автоматически! Выровняли разрез по переносице.")
         else:
-            st.info("💡 Лицо не распознано автоматически (возможно, из-за наклона). Подправь ползунок вручную:")
+            st.info("💡 Лицо не распознано автоматически. Подправь ползунок вручную:")
     
     # Ползунок автоматически прыгает в найденную координату центра лица!
     mid_x = st.slider("📐 Смести линию разреза, если хочешь подкорректировать результат:", 
