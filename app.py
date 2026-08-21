@@ -1,6 +1,8 @@
 import streamlit as st
 import cv2
 import numpy as np
+import urllib.request
+import os
 
 # Настройка внешнего вида страницы
 st.set_page_config(page_title="Симметрия лица", page_icon="👤", layout="centered")
@@ -8,10 +10,22 @@ st.set_page_config(page_title="Симметрия лица", page_icon="👤", l
 st.title("👤 Двойники в твоем лице")
 st.write("Загрузи фото, и умный алгоритм автоматически найдет центр твоего лица!")
 
-# Загружаем классический встроенный детектор лиц OpenCV
+# Умная функция: сама скачивает файл детектора лиц прямо в память сервера
 @st.cache_resource
 def load_cascade():
-    return cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+    cascade_path = "haarcascade_frontalface_default.xml"
+    if not os.path.exists(cascade_path):
+        url = "https://githubusercontent.com"
+        try:
+            # Маскируемся под браузер, чтобы обойти блокировки сервера
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req) as response:
+                with open(cascade_path, 'wb') as f:
+                    f.write(response.read())
+        except Exception as e:
+            st.error("Не удалось загрузить системный файл детектора. Пожалуйста, обновите страницу.")
+            return None
+    return cv2.CascadeClassifier(cascade_path)
 
 face_cascade = load_cascade()
 
@@ -27,15 +41,13 @@ if uploaded_file is not None:
     # Центр лица по умолчанию (геометрическая середина кадра)
     mid_x = w // 2
     
-    # Автоматический поиск лица встроенными средствами
+    # Автоматический поиск лица
     if face_cascade is not None and not face_cascade.empty():
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(100, 100))
         
         if len(faces) > 0:
-            # Найдено лицо! Берем его координаты (x, y, ширина, height)
-            fx, fy, fw, fh = faces[0]
-            # Вычисляем точный центр лица по горизонтали (ось переносицы и носа)
+            fx, fy, fw, fh = faces
             mid_x = fx + (fw // 2)
             st.success("🎯 Центр лица успешно определен автоматически!")
         else:
@@ -50,12 +62,10 @@ if uploaded_file is not None:
     img_corrected = cv2.cvtColor(limg, cv2.COLOR_LAB2BGR)
     
     # --- ТОЧНАЯ МАТЕМАТИКА ИЗ ВАШЕГО COLAB-КОДА ---
-    # Обработка левой половины
     left_half = img_corrected[:, :mid_x]
     left_half_flipped = cv2.flip(left_half, 1)
     left_face = np.hstack((left_half, left_half_flipped))
     
-    # Обработка правой половины
     right_half = img_corrected[:, mid_x:]
     right_half_flipped = cv2.flip(right_half, 1)
     right_face = np.hstack((right_half_flipped, right_half))
@@ -63,16 +73,13 @@ if uploaded_file is not None:
     # Вычисляем индивидуальные пропорции для правильного отображения (как в Colab!)
     preview_w = 400
     
-    # Высота для левого лица
     preview_h_left = int(h * (preview_w / (mid_x * 2))) if mid_x > 0 else h
     left_face_disp = cv2.resize(left_face, (preview_w, preview_h_left))
     left_face_rgb = cv2.cvtColor(left_face_disp, cv2.COLOR_BGR2RGB)
     
-    # Высота для правого лица
     preview_h_right = int(h * (preview_w / ((w - mid_x) * 2))) if (w - mid_x) > 0 else h
     right_face_disp = cv2.resize(right_face, (preview_w, preview_h_right))
     right_face_rgb = cv2.cvtColor(right_face_disp, cv2.COLOR_BGR2RGB)
-    # -------------------------------------------------------------------------
     
     # Отображение результатов на сайте
     st.write("---")
