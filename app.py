@@ -6,7 +6,14 @@ import numpy as np
 st.set_page_config(page_title="Симметрия лица", page_icon="👤", layout="centered")
 
 st.title("👤 Двойники в твоем лице")
-st.write("Загрузи фото анфас, чтобы увидеть, как бы ты выглядел, если бы твоё лицо было абсолютно симметричным!")
+st.write("Загрузи фото, и умный алгоритм автоматически найдет центр твоего лица!")
+
+# Загружаем классический встроенный детектор лиц OpenCV
+@st.cache_resource
+def load_cascade():
+    return cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+
+face_cascade = load_cascade()
 
 # Загрузка файла пользователем
 uploaded_file = st.file_uploader("Выбери фотографию (JPG, PNG)", type=["jpg", "jpeg", "png"])
@@ -15,15 +22,24 @@ if uploaded_file is not None:
     # Читаем файл в формат OpenCV
     file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
     img = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
-    
     h, w, _ = img.shape
     
-    # Геометрический центр картинки по умолчанию
-    default_mid = w // 2
+    # Центр лица по умолчанию (геометрическая середина кадра)
+    mid_x = w // 2
     
-    # Плавный интерактивный ползунок для ручной настройки центра носа
-    mid_x = st.slider("📐 Наведи ползунок точно на центр своего носа:", 
-                      min_value=1, max_value=w-1, value=default_mid, step=1)
+    # Автоматический поиск лица встроенными средствами
+    if face_cascade is not None and not face_cascade.empty():
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(100, 100))
+        
+        if len(faces) > 0:
+            # Найдено лицо! Берем его координаты (x, y, ширина, height)
+            fx, fy, fw, fh = faces[0]
+            # Вычисляем точный центр лица по горизонтали (ось переносицы и носа)
+            mid_x = fx + (fw // 2)
+            st.success("🎯 Центр лица успешно определен автоматически!")
+        else:
+            st.warning("⚠️ Лицо не распознано автоматически. Разрез сделан ровно по центру кадра.")
     
     # Умная цветокоррекция яркости (CLAHE) — убирает боковые тени
     lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
@@ -33,27 +49,30 @@ if uploaded_file is not None:
     limg = cv2.merge((cl, a_channel, b_channel))
     img_corrected = cv2.cvtColor(limg, cv2.COLOR_LAB2BGR)
     
-    # Обработка левой половины (размер итогового фото будет строго mid_x * 2)
+    # --- ТОЧНАЯ МАТЕМАТИКА ИЗ ВАШЕГО COLAB-КОДА ---
+    # Обработка левой половины
     left_half = img_corrected[:, :mid_x]
     left_half_flipped = cv2.flip(left_half, 1)
     left_face = np.hstack((left_half, left_half_flipped))
     
-    # Обработка правой половины (размер итогового фото будет строго (w - mid_x) * 2)
+    # Обработка правой половины
     right_half = img_corrected[:, mid_x:]
     right_half_flipped = cv2.flip(right_half, 1)
     right_face = np.hstack((right_half_flipped, right_half))
     
-    # --- МАТЕМАТИЧЕСКОЕ ВЫРАВНИВАНИЕ ЭКРАНА ---
-    # Приводим оба лица на экране к одной красивой ширине (например, 400 пикселей)
-    target_w = 400
-    target_h = int(h * (target_w / w)) # Высота рассчитывается автоматически по пропорциям оригинала
+    # Вычисляем индивидуальные пропорции для правильного отображения (как в Colab!)
+    preview_w = 400
     
-    left_face_disp = cv2.resize(left_face, (target_w, target_h))
-    right_face_disp = cv2.resize(right_face, (target_w, target_h))
-    
-    # Переводим в RGB для правильного отображения цветов на сайте
+    # Высота для левого лица
+    preview_h_left = int(h * (preview_w / (mid_x * 2))) if mid_x > 0 else h
+    left_face_disp = cv2.resize(left_face, (preview_w, preview_h_left))
     left_face_rgb = cv2.cvtColor(left_face_disp, cv2.COLOR_BGR2RGB)
+    
+    # Высота для правого лица
+    preview_h_right = int(h * (preview_w / ((w - mid_x) * 2))) if (w - mid_x) > 0 else h
+    right_face_disp = cv2.resize(right_face, (preview_w, preview_h_right))
     right_face_rgb = cv2.cvtColor(right_face_disp, cv2.COLOR_BGR2RGB)
+    # -------------------------------------------------------------------------
     
     # Отображение результатов на сайте
     st.write("---")
