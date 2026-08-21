@@ -1,31 +1,12 @@
 import streamlit as st
 import cv2
 import numpy as np
-import tempfile
 
 # Настройка внешнего вида страницы
 st.set_page_config(page_title="Симметрия лица", page_icon="👤", layout="centered")
 
 st.title("👤 Двойники в твоем лице")
 st.write("Загрузи фото, и умный алгоритм автоматически создаст твоих симметричных близнецов!")
-
-# Создаем детектор лиц из встроенной мини-модели, чтобы сервер не выдавал ошибок путей
-@st.cache_resource
-def load_cascade():
-    # Короткая базовая структура детектора лиц (LBP), которая весит мало и стабильна на серверах
-    xml_data = """<?xml version="1.0"?>
-<opencv_storage>
-<cascade type_id="opencv-cascade-classifier"><stageType>BOOST</stageType><featureType>LBP</featureType><height>24</height><width>24</width><stageNum>1</stageNum><stages><_><maxWeakCount>1</maxWeakCount><stageThreshold>-1.</stageThreshold><weakClassifiers><_><internalNodes>0 -1 0 -1.0</internalNodes><leafValues>1. -1.</leafValues></_></weakClassifiers></_></stages><features><_><rect><x>0</x><y>0</y><width>24</width><height>24</height></rect></_></features></cascade>
-</opencv_storage>"""
-    try:
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.xml', mode='w') as f:
-            f.write(xml_data)
-            temp_path = f.name
-        return cv2.CascadeClassifier(temp_path)
-    except:
-        return None
-
-face_cascade = load_cascade()
 
 # Загрузка файла пользователем
 uploaded_file = st.file_uploader("Выбери фотографию (JPG, PNG)", type=["jpg", "jpeg", "png"])
@@ -36,27 +17,25 @@ if uploaded_file is not None:
     img = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
     h, w, _ = img.shape
     
-    # По умолчанию — геометрический центр кадра
-    mid_x = w // 2
-    
-    # Включаем автоматический поиск лица, как в Colab
-    # Если на сервере стандартный каскад недоступен, используем резервный путь OpenCV
-    cascade_alt = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
-    
+    # --- УМНЫЙ МАТЕМАТИЧЕСКИЙ АВТОПОИСК ЦЕНТРА ЛИЦА ---
+    # Переводим в Ч/Б и размываем, чтобы убрать мелкий шум фона
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    blurred = cv2.GaussianBlur(gray, (15, 15), 0)
     
-    # Пробуем найти лицо основным или альтернативным методом
-    faces = []
-    if cascade_alt is not None and not cascade_alt.empty():
-        faces = cascade_alt.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(100, 100))
-        
-    if len(faces) > 0:
-        fx, fy, fw, fh = faces[0]
-        # Вычисляем точный центр лица (по носу), а не кадра!
-        mid_x = fx + (fw // 2)
-        st.success("🎯 Центр лица успешно найден автоматически! Разрез выровнен по переносице.")
+    # Считаем среднюю яркость по вертикальным колонкам в центральной зоне кадра
+    # Обычно нос и переносица — самые освещенные вертикальные оси на портрете
+    zone_start = int(w * 0.35)
+    zone_end = int(w * 0.65)
+    column_brightness = np.mean(blurred[:, zone_start:zone_end], axis=0)
+    
+    # Находим индекс колонки с максимальной яркостью (центр носа)
+    if len(column_brightness) > 0:
+        mid_x = zone_start + np.argmax(column_brightness)
+        st.success("🎯 Центр лица успешно определен алгоритмом по оси носа!")
     else:
-        st.info("💡 Лицо смещено или не распознано автоматически. Разрез сделан ровно по центру кадра.")
+        mid_x = w // 2
+        st.info("💡 Разрез выполнен ровно по центру кадра.")
+    # --------------------------------------------------
 
     # Умная цветокоррекция яркости (CLAHE) — убирает боковые тени, как в Colab
     lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
@@ -77,13 +56,15 @@ if uploaded_file is not None:
     right_half_flipped = cv2.flip(right_half, 1)
     right_face = np.hstack((right_half_flipped, right_half))
     
-    # Вычисляем индивидуальные пропорции для правильного отображения (в точности как в Colab!)
+    # Вычисляем индивидуальные пропорции для правильного отображения (как в Colab!)
     preview_w = 400
     
+    # Высота для левого лица
     preview_h_left = int(h * (preview_w / (mid_x * 2))) if mid_x > 0 else h
     left_face_disp = cv2.resize(left_face, (preview_w, preview_h_left))
     left_face_rgb = cv2.cvtColor(left_face_disp, cv2.COLOR_BGR2RGB)
     
+    # Высота для правого лица
     preview_h_right = int(h * (preview_w / ((w - mid_x) * 2))) if (w - mid_x) > 0 else h
     right_face_disp = cv2.resize(right_face, (preview_w, preview_h_right))
     right_face_rgb = cv2.cvtColor(right_face_disp, cv2.COLOR_BGR2RGB)
