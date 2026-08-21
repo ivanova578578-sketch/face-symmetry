@@ -1,6 +1,8 @@
 import streamlit as st
 import cv2
 import numpy as np
+import urllib.request
+import os
 
 # Настройка внешнего вида страницы
 st.set_page_config(page_title="Симметрия лица", page_icon="👤", layout="centered")
@@ -8,10 +10,14 @@ st.set_page_config(page_title="Симметрия лица", page_icon="👤", l
 st.title("👤 Двойники в твоем лице")
 st.write("Загрузи фото анфас, чтобы увидеть, как бы ты выглядел, если бы твоё лицо было абсолютно симметричным!")
 
-# Каскад Хаара для поиска лица
+# Безопасная загрузка детектора лиц напрямую через интернет
 @st.cache_resource
 def load_cascade():
-    return cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+    cascade_path = "haarcascade_frontalface_default.xml"
+    if not os.path.exists(cascade_path):
+        url = "https://githubusercontent.com"
+        urllib.request.urlretrieve(url, cascade_path)
+    return cv2.CascadeClassifier(cascade_path)
 
 face_cascade = load_cascade()
 
@@ -21,7 +27,6 @@ uploaded_file = st.file_uploader("Выбери фотографию (JPG, PNG)",
 if uploaded_file is not None:
     # Читаем файл в формат OpenCV
     file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
-    img = cv2.imencode('.jpg', cv2.imdecode(file_bytes, cv2.IMREAD_COLOR))[1] # Безопасное чтение
     img = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
     
     h, w, _ = img.shape
@@ -32,7 +37,7 @@ if uploaded_file is not None:
     
     default_mid = w // 2
     if len(faces) > 0:
-        fx, fy, fw, fh = faces[0]
+        fx, fy, fw, fh = faces[0]  # Берем первое лицо
         default_mid = int(fx + (fw / 2))
     
     # Ползунок для точной ручной настройки центра (если нейросеть промазала)
