@@ -18,59 +18,50 @@ if uploaded_file is not None:
     
     h, w, _ = img.shape
     
-    # Геометрический центр кадра
-    true_mid = w // 2
-    
-    # Ползунок двигает само фото (смещение влево/вправо относительно центра)
-    max_shift = w // 3
-    shift = st.slider("📐 Подвинь лицо влево или вправо, чтобы поймать центр носа:", 
-                      min_value=-max_shift, max_value=max_shift, value=0, step=1)
-    
-    # Сдвигаем картинку по горизонтали
-    M = np.float32([[1, 0, -shift],])
-    img_shifted = cv2.warpAffine(img, M, (w, h), borderMode=cv2.BORDER_REPLICATE)
+    # Ползунок для точной ручной настройки центра носа
+    mid_x = st.slider("📐 Наведи ползунок точно на центр носа:", 
+                      min_value=1, max_value=w-1, value=w // 2, step=1)
     
     # Умная цветокоррекция яркости (CLAHE)
-    lab = cv2.cvtColor(img_shifted, cv2.COLOR_BGR2LAB)
+    lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
     l_channel, a_channel, b_channel = cv2.split(lab)
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
     cl = clahe.apply(l_channel)
     limg = cv2.merge((cl, a_channel, b_channel))
     img_corrected = cv2.cvtColor(limg, cv2.COLOR_LAB2BGR)
     
-    # Режем ровно пополам
-    left_half = img_corrected[:, :true_mid]
+    # --- ТОЧНАЯ ЛОГИКА ИЗ COLAB ---
+    # Обработка левой половины
+    left_half = img_corrected[:, :mid_x]
     left_half_flipped = cv2.flip(left_half, 1)
     left_face = np.hstack((left_half, left_half_flipped))
     
-    right_half = img_corrected[:, true_mid:]
+    # Обработка правой половины
+    right_half = img_corrected[:, mid_x:]
     right_half_flipped = cv2.flip(right_half, 1)
     right_face = np.hstack((right_half_flipped, right_half))
     
-    # --- ЖЕСТКОЕ ВЫРАВНИВАНИЕ РАЗМЕРА И ВЫСОТЫ ---
-    # Принудительно делаем картинки квадратными (например, 600x600 пикселей)
-    # Это полностью уберет разницу в высоте из-за текста или фона
-    side_size = 600
-    left_face_final = cv2.resize(left_face, (side_size, side_size))
-    right_face_final = cv2.resize(right_face, (side_size, side_size))
-    # ---------------------------------------------
-    
-    # Конвертируем в RGB для сайта
-    left_face_rgb = cv2.cvtColor(left_face_final, cv2.COLOR_BGR2RGB)
-    right_face_rgb = cv2.cvtColor(right_face_final, cv2.COLOR_BGR2RGB)
+    # Конвертируем в RGB для корректного отображения цветов на сайте
+    left_face_rgb = cv2.cvtColor(left_face, cv2.COLOR_BGR2RGB)
+    right_face_rgb = cv2.cvtColor(right_face, cv2.COLOR_BGR2RGB)
     
     # Отображение результатов на сайте
     st.write("---")
     col1, col2 = st.columns(2)
     
+    # Задаем фиксированную высоту для красивого отображения на экране (например, 450 пикселей)
+    display_height = 450
+    
     with col1:
         st.subheader("Левая сторона 🕶️")
-        st.image(left_face_rgb, use_container_width=True)
-        _, img_encoded = cv2.imencode('.jpg', left_face_final)
+        # Параметр height задает одинаковую высоту на экране
+        st.image(left_face_rgb, height=display_height)
+        _, img_encoded = cv2.imencode('.jpg', left_face)
         st.download_button(label="📥 Скачать левое лицо", data=img_encoded.tobytes(), file_name="left_symmetry.jpg", mime="image/jpeg")
         
     with col2:
         st.subheader("Правая сторона ✨")
-        st.image(right_face_rgb, use_container_width=True)
-        _, img_encoded = cv2.imencode('.jpg', right_face_final)
+        # Параметр height задает одинаковую высоту на экране
+        st.image(right_face_rgb, height=display_height)
+        _, img_encoded = cv2.imencode('.jpg', right_face)
         st.download_button(label="📥 Скачать правое лицо", data=img_encoded.tobytes(), file_name="right_symmetry.jpg", mime="image/jpeg")
